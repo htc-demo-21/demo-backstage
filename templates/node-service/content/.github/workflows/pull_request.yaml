@@ -7,10 +7,7 @@ permissions:
   pull-requests: write
 env:
   APP_NAME: ${{ values.name }}
-  AWS_ECR: {% raw %}${{ secrets.AWS_ECR }}{% endraw %}
   IMAGE: ${{ values.image }}
-  AWS_REGION: {% raw %}${{ secrets.AWS_REGION }}{% endraw %}
-  
   BASE_ENVIRONMENT: 'development'
   ENVIRONMENT_TYPE: 'development'
   SCORE_HUMANITEC_VERSION: 0.7.0
@@ -53,17 +50,13 @@ jobs:
         run: echo "TAG=`echo $GITHUB_SHA | cut -c 1-7`" >> $GITHUB_ENV
 
       - run: |
-          aws ecr get-login-password --region $AWS_REGION \
-            | docker login \
-                --username AWS \
-                --password-stdin \
-                $AWS_ECR
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          echo "${{ secrets.ACR_PUSH_SP_PASSWORD }}" | docker login \
+              ${{ secrets.ACR_SERVER_NAME }} \
+              -u ${{ secrets.ACR_PUSH_SP_ID }} \
+              --password-stdin
 
-      - run: docker build --platform linux/amd64 . -t $AWS_ECR/$IMAGE:$TAG
-      - run: docker push $AWS_ECR/$IMAGE:$TAG
+      - run: docker build --platform linux/amd64 . -t ${{ secrets.ACR_SERVER_NAME }}/$IMAGE:$TAG
+      - run: docker push ${{ secrets.ACR_SERVER_NAME }}/$IMAGE:$TAG
 
       - name: Inform Humanitec
         run: |-
@@ -72,7 +65,7 @@ jobs:
             --header 'Authorization: Bearer ${{ secrets.HUMANITEC_TOKEN }}' \
             --header 'Content-Type: application/json' \
             --data-raw '{
-                "name": "'$AWS_ECR/$IMAGE'",
+                "name": "'${{ secrets.ACR_SERVER_NAME }}/$IMAGE'",
                 "version": "'$TAG'",
                 "type": "container",
                 "commit": "'$GITHUB_SHA'",
@@ -88,7 +81,7 @@ jobs:
               --org ${{ secrets.HUMANITEC_ORG_ID }} \
               --app ${{ env.APP_NAME }} \
               --env ${{ env.ENVIRONMENT_ID }} \
-              --property containers.frontend.image=$AWS_ECR/$IMAGE:$TAG \
+              --property containers.frontend.image=${{ secrets.ACR_SERVER_NAME }}/$IMAGE:$TAG \
               | tee score_output.json
       - name: Wait for deployment
         run: |
