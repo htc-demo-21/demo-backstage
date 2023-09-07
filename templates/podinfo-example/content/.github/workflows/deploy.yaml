@@ -8,12 +8,8 @@ concurrency:
   group: ${{ github.ref }}
   cancel-in-progress: true
 env:
-  AWS_ECR: ${{ secrets.AWS_ECR }}
 {% endraw %}
   IMAGE: ${{ values.image }}
-{% raw %}
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-{% endraw %}
   SCORE_HUMANITEC_VERSION: 0.7.0
   APP_NAME: ${{ values.name }}
 
@@ -28,17 +24,13 @@ jobs:
         run: echo "TAG=`echo $GITHUB_SHA | cut -c 1-7`" >> $GITHUB_ENV
 
       - run: |
-          aws ecr get-login-password --region $AWS_REGION \
-            | docker login \
-                --username AWS \
-                --password-stdin \
-                $AWS_ECR
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          echo "${{ secrets.ACR_PUSH_SP_PASSWORD }}" | docker login \
+              ${{ secrets.ACR_SERVER_NAME }} \
+              -u ${{ secrets.ACR_PUSH_SP_ID }} \
+              --password-stdin
 
-      - run: docker build --platform linux/amd64 . -t $AWS_ECR/$IMAGE:$TAG
-      - run: docker push $AWS_ECR/$IMAGE:$TAG
+      - run: docker build --platform linux/amd64 . -t ${{ secrets.ACR_SERVER_NAME }}/$IMAGE:$TAG
+      - run: docker push ${{ secrets.ACR_SERVER_NAME }}/$IMAGE:$TAG
 
       - name: Inform Humanitec
         run: |-
@@ -47,7 +39,7 @@ jobs:
             --header 'Authorization: Bearer ${{ secrets.HUMANITEC_TOKEN }}' \
             --header 'Content-Type: application/json' \
             --data-raw '{
-                "name": "'$AWS_ECR/$IMAGE'",
+                "name": "'${{ secrets.ACR_SERVER_NAME }}/$IMAGE'",
                 "version": "'$TAG'",
                 "type": "container",
                 "commit": "'$GITHUB_SHA'",
@@ -59,5 +51,5 @@ jobs:
           version: ${{ env.SCORE_HUMANITEC_VERSION }}
       - name: Deploy using Score
         run: |
-          score-humanitec delta --env development --app ${{ env.APP_NAME }} --org="${{ secrets.HUMANITEC_ORG_ID }}" --token "${{ secrets.HUMANITEC_TOKEN }}" --deploy --property containers.frontend.image=$AWS_ECR/$IMAGE:$TAG
+          score-humanitec delta --env development --app ${{ env.APP_NAME }} --org="${{ secrets.HUMANITEC_ORG_ID }}" --token "${{ secrets.HUMANITEC_TOKEN }}" --deploy --property containers.frontend.image=${{ secrets.ACR_SERVER_NAME }}/$IMAGE:$TAG
 {% endraw %}
